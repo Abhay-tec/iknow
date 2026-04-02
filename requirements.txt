@@ -1,0 +1,8 @@
+flask==3.0.2
+prometheus_client==0.20.0
+gunicorn==22.0.0
+twilio==9.3.2
+websocket-client==1.8.0
+flask-limiter==3.8.0
+flask-httpauth==4.8.0
+marshmallow==3.21.1
