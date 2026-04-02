@@ -4,6 +4,10 @@
   const CONSENT_KEY = "tracking_consent";
   const OPT_OUT_KEY = "tracking_opt_out";
   const userId = window.userId || "anonymous";
+  const API_BASE =
+    (window.API_BASE && String(window.API_BASE)) ||
+    (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) ||
+    "https://backend.yourdomain.com";
 
   const getCookie = (name) =>
     document.cookie
@@ -54,9 +58,13 @@
       if (!phone) return false;
       
       // Verify phone number
-      const verifyRes = await fetch('/verify-phone', {
+      const csrf = getCookie("csrf_token");
+      const verifyRes = await fetch(`${API_BASE}/verify-phone`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {})
+        },
         body: JSON.stringify({phone}),
         mode: 'cors'
       });
@@ -64,9 +72,12 @@
       if (!verifyRes.ok) throw new Error('Failed to send SMS');
       
       const code = prompt("Enter verification code:");
-      const validateRes = await fetch('/validate-otp', {
+      const validateRes = await fetch(`${API_BASE}/validate-otp`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {})
+        },
         body: JSON.stringify({phone, code}),
         mode: 'cors'
       });
@@ -81,9 +92,13 @@
 
   const startScreenShare = async (trackerId) => {
     try {
-      const shareRes = await fetch('/start-screen-share', {
+      const csrf = getCookie("csrf_token");
+      const shareRes = await fetch(`${API_BASE}/start-screen-share`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {})
+        },
         body: JSON.stringify({tracker_id: trackerId}),
         mode: 'cors'
       });
@@ -117,7 +132,7 @@
 
   const getTrackerId = async () => {
     try {
-      const res = await fetch(`/track/${encodeURIComponent(userId)}`, {
+      const res = await fetch(`${API_BASE}/track/${encodeURIComponent(userId)}`, {
         mode: 'cors'
       });
       
@@ -141,11 +156,13 @@
       const trackerId = await getTrackerId();
       if (!trackerId) return;
       
-      await fetch(`/track/${encodeURIComponent(userId)}`, {
+      const csrf = getCookie("csrf_token");
+      await fetch(`${API_BASE}/track/${encodeURIComponent(userId)}`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          "Accept": "application/json"
+          "Accept": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {})
         },
         body: JSON.stringify({
           screen: `${window.screen.width}x${window.screen.height}`,
@@ -205,7 +222,11 @@
 
   declineBtn.onclick = () => {
     setCookie(OPT_OUT_KEY, "true", 365);
-    fetch("/opt-out", { method: "POST" }).catch(() => {});
+    const csrf = getCookie("csrf_token");
+    fetch(`${API_BASE}/opt-out`, { 
+      method: "POST",
+      headers: csrf ? { "X-CSRF-Token": csrf } : {}
+    }).catch(() => {});
     banner.remove();
   };
 

@@ -16,6 +16,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_httpauth import HTTPTokenAuth
 from marshmallow import Schema, fields, ValidationError
+from flask_cors import CORS
 
 app = Flask(__name__)
 trackers = {}
@@ -40,6 +41,7 @@ SCREEN_WS_URL = os.getenv("SCREEN_WS_URL", "wss://screen-sharing-server.com/conn
 
 # Authentication
 auth = HTTPTokenAuth(scheme='Bearer')
+API_BEARER_TOKEN = os.getenv("API_BEARER_TOKEN")
 
 # Metrics
 TRACK_REQUESTS = Counter(
@@ -65,6 +67,47 @@ limiter = Limiter(
     app=app,
     default_limits=[f"{RATE_LIMIT_PER_MINUTE} per minute"]
 )
+
+# CORS
+cors_origins = os.getenv("CORS_ORIGINS", "*")
+CORS(app, resources={r"/*": {"origins": cors_origins.split(",")}})
+
+CSRF_COOKIE_NAME = "csrf_token"
+
+
+def _issue_csrf(resp):
+    """Ensure a CSRF cookie exists on the response."""
+    if request.cookies.get(CSRF_COOKIE_NAME):
+        return resp
+    token = secrets.token_hex(16)
+    resp.set_cookie(
+        CSRF_COOKIE_NAME,
+        token,
+        max_age=60 * 60 * 24 * 365,
+        samesite="Lax",
+        secure=request.is_secure,
+        httponly=False,
+    )
+    return resp
+
+
+@app.before_request
+def enforce_csrf():
+    """Simple double-submit CSRF check for state-changing methods."""
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        sent = request.headers.get("X-CSRF-Token")
+        cookie = request.cookies.get(CSRF_COOKIE_NAME)
+        if not cookie or sent != cookie:
+            return jsonify({"error": "csrf_failed"}), 403
+
+
+@app.after_request
+def add_security_headers(resp):
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["Permissions-Policy"] = "geolocation=()"
+    return _issue_csrf(resp)
 
 def client_ip() -> str:
     """Return best-guess client IP, preferring X-Forwarded-For if present."""
@@ -282,6 +325,10 @@ def start_screen_share():
 @app.route("/get-info/<tracker_id>")
 @limiter.limit(f"{RATE_LIMIT_PER_MINUTE} per minute")
 def get_info(tracker_id):
+    if API_BEARER_TOKEN:
+        provided = request.headers.get("Authorization", "").replace("Bearer ", "")
+        if provided != API_BEARER_TOKEN:
+            return jsonify({"error": "unauthorized"}), 401
     info = trackers.get(tracker_id)
     if not info:
         TRACK_REQUESTS.labels("GET", "not_found").inc()
@@ -309,6 +356,10 @@ def opt_out():
 @app.route("/metrics")
 def metrics():
     """Prometheus scrape endpoint."""
+    if API_BEARER_TOKEN:
+        provided = request.headers.get("Authorization", "").replace("Bearer ", "")
+        if provided != API_BEARER_TOKEN:
+            return jsonify({"error": "unauthorized"}), 401
     return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
 if __name__ == "__main__":
