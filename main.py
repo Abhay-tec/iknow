@@ -62,10 +62,12 @@ except Exception:
     twilio_client = None
 
 # Rate limiting
+limiter_storage = os.getenv("RATELIMIT_STORAGE_URI") or None
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=[f"{RATE_LIMIT_PER_MINUTE} per minute"]
+    default_limits=[f"{RATE_LIMIT_PER_MINUTE} per minute"],
+    storage_uri=limiter_storage,
 )
 
 # CORS

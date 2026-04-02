@@ -7,3 +7,4 @@ flask-limiter==3.8.0
 flask-httpauth==4.8.0
 marshmallow==3.21.1
 flask-cors==4.0.1
+serverless-wsgi==3.0.4

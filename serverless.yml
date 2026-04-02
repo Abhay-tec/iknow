@@ -1,0 +1,46 @@
+service: tracker-service
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: us-east-1
+  stage: ${opt:stage, 'prod'}
+  memorySize: 512
+  timeout: 30
+  environment:
+    TWILIO_ACCOUNT_SID: ${env:TWILIO_ACCOUNT_SID}
+    TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN}
+    TWILIO_PHONE: ${env:TWILIO_PHONE}
+    SCREEN_WS_URL: ${env:SCREEN_WS_URL}
+    API_BEARER_TOKEN: ${env:API_BEARER_TOKEN}
+    CORS_ORIGINS: ${env:CORS_ORIGINS}
+    RATELIMIT_STORAGE_URI: ${env:RATELIMIT_STORAGE_URI}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: "*"
+
+functions:
+  app:
+    handler: wsgi_handler.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+
+plugins:
+  - serverless-wsgi
+  - serverless-python-requirements
+
+custom:
+  wsgi:
+    app: main.app
+    packRequirements: false
+  pythonRequirements:
+    dockerizePip: true

@@ -1,0 +1,47 @@
+name: Deploy Tracker
+
+on:
+  push:
+    branches: [main, staging]
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m py_compile main.py
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      STAGE: ${{ github.ref_name == 'main' && 'prod' || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install serverless serverless-wsgi serverless-python-requirements
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/github-oidc-deploy
+          aws-region: ${{ env.AWS_REGION }}
+      - run: |
+          export TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }}
+          export TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
+          export TWILIO_PHONE=${{ secrets.TWILIO_PHONE }}
+          export SCREEN_WS_URL=${{ secrets.SCREEN_WS_URL }}
+          export API_BEARER_TOKEN=${{ secrets.API_BEARER_TOKEN }}
+          export CORS_ORIGINS=${{ secrets.CORS_ORIGINS }}
+          export RATELIMIT_STORAGE_URI=${{ secrets.RATELIMIT_STORAGE_URI }}
+          npx serverless deploy --stage $STAGE
